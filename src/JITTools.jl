@@ -131,15 +131,15 @@ function dwarfdumpr(desc::jit_descriptor, fname)
     end
 end
 
-datapointer(data::Union(MachO.section,MachO.section_64)) = convert(Ptr{Uint8},data.addr)
-datasize(data::Union(MachO.section,MachO.section_64)) = Int(data.size)
+datapointer(data::Union{MachO.section,MachO.section_64}) = convert(Ptr{Uint8},data.addr)
+datasize(data::Union{MachO.section,MachO.section_64}) = Int(data.size)
 
 # Get unrelocated section
 datapointer(entry::jit_code_entry, section::Union(MachO.section,MachO.section_64)) =
     convert(Ptr{Uint8},datapointer(entry)+section.offset)
 # This is strictly speaking incorrect as the vm size may be different from the size in the file.
 # For now I don't care about that though
-datasize(entry::jit_code_entry,data::Union(MachO.section,MachO.section_64)) = datasize(data)
+datasize(entry::jit_code_entry,data::Union{MachO.section,MachO.section_64}) = datasize(data)
 
 end
 
