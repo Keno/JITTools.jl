@@ -2,36 +2,36 @@ module JITTools
 
 import Base: show, start, next, done
 
-export load_descriptor, datadump, otool, dwarfdump, buffer,
-       datapointer, datadumpr, dwarfdumpr,
+export load_descriptor, datadump, otool, dwarfdump, buffer, bufferr,
+       datapointer, datasize, datadumpr, dwarfdumpr,
 # Reexport from ObjFileBase
        readmeta
 
 immutable jit_code_entry
     next_entry::Ptr{jit_code_entry}
     prev_entry::Ptr{jit_code_entry}
-    symfile_addr::Uint64
-    symfile_size::Uint64
+    symfile_addr::UInt64
+    symfile_size::UInt64
 end
 
 immutable jit_descriptor
-   version::Uint32
-   action_flag::Uint32
+   version::UInt32
+   action_flag::UInt32
    relevant_entry::Ptr{jit_code_entry}
    first_entry::Ptr{jit_code_entry}
 end
 
 load_descriptor() = unsafe_load(cglobal(:__jit_debug_descriptor,jit_descriptor))
 
-show(io::IO, desc::jit_descriptor) = 
+show(io::IO, desc::jit_descriptor) =
     print(io,"JIT Descriptor (Version ",desc.version,")")
 
-show(io::IO, entry::jit_code_entry) = 
+show(io::IO, entry::jit_code_entry) =
     print(io,"JIT Entry for Symfile at 0x",hex(entry.symfile_addr)," of size ",entry.symfile_size, " bytes")
 
 # Iterating through all the jit entries
 start(desc::jit_descriptor) = desc.first_entry
-function next(desc::jit_descriptor,state::Ptr{jit_code_entry}) 
+function next(desc::jit_descriptor,state::Ptr{jit_code_entry})
     if state == C_NULL
         throw(BoundsError())
     end
@@ -40,12 +40,18 @@ function next(desc::jit_descriptor,state::Ptr{jit_code_entry})
 end
 done(desc::jit_descriptor, state::Ptr{jit_code_entry}) = state == C_NULL
 
-datasize(data::jit_code_entry) = int(data.symfile_size)
+datasize(data::jit_code_entry) = Int(data.symfile_size)
 datapointer(data::jit_code_entry) = convert(Ptr{Uint8},data.symfile_addr)
 
 buffer(data...) = IOBuffer(pointer_to_array(datapointer(data...),datasize(data...),false),true,true)
 
 datadump(io::IO,data...) = write(io,datapointer(data...),datasize(data...))
+
+# Create a buffer, containing a relocated object file
+function bufferr(data...)
+    orig = buffer(data...)
+    replace_sections_from_memory(readmeta(buffer),copy(orig))
+end
 
 @osx_only begin
 
@@ -62,7 +68,7 @@ function datadumpr(io::IO,data::jit_code_entry)
         if eltype(cmd) <: MachO.segment_commands
             for sec in Sections(cmd)
                 seek(buf,sec.offset)
-                if int(datapointer(sec)) > 0x10000
+                if Int(datapointer(sec)) > 0x10000
                     write(buf,datapointer(sec),datasize(sec))
                 end
             end
@@ -126,7 +132,7 @@ function dwarfdumpr(desc::jit_descriptor, fname)
 end
 
 datapointer(data::Union(MachO.section,MachO.section_64)) = convert(Ptr{Uint8},data.addr)
-datasize(data::Union(MachO.section,MachO.section_64)) = int(data.size)
+datasize(data::Union(MachO.section,MachO.section_64)) = Int(data.size)
 
 # Get unrelocated section
 datapointer(entry::jit_code_entry, section::Union(MachO.section,MachO.section_64)) =
